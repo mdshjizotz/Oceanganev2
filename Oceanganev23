@@ -1,0 +1,243 @@
+index.html (Game Interface + Payment Integration)<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Endless Swimming Game</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>Endless Swimming Adventure</h1>
+    <p>Select Your Swimmer:</p>
+    <select id="character-select">
+        <option value="swimmer1">Swimmer 1</option>
+        <option value="swimmer2">Swimmer 2</option>
+    </select>
+    <button onclick="startGame()">Start Game</button>
+    <p>High Score: <span id="high-score">0</span></p>
+    
+    <canvas id="gameCanvas"></canvas>
+
+    <script src="script.js"></script>
+</body>
+</html><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Endless Swimming Game</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>Endless Swimming Adventure</h1>
+    <p>Select Your Swimmer:</p>
+    <select id="character-select">
+        <option value="swimmer1">Swimmer 1</option>
+        <option value="swimmer2">Swimmer 2</option>
+    </select>
+    <button onclick="startGame()">Start Game</button>
+    <p>High Score: <span id="high-score">0</span></p>
+
+    <h3>🏆 Leaderboard:</h3>
+    <ul id="leaderboard"></ul>
+
+    <h3>💎 Buy Power-Ups:</h3>
+    <button onclick="buyPowerUp('speedBoost')">Speed Boost - ₹10</button>
+    <button onclick="buyPowerUp('immunity')">Immunity - ₹20</button>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script src="script.js"></script>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+</body>
+</html>
+style.css (Game Design)
+body {
+    text-align: center;
+    background-color: #87CEEB;
+    font-family: Arial, sans-serif;
+}
+
+h1 {
+    color: #fff;
+}
+
+canvas {
+    border: 2px solid #000;
+    background-color: #1E90FF;
+}
+script.js (Game Logic with High Score and Power-Ups)
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = 600;
+canvas.height = 400;
+
+let swimmer;
+let seaCreature;
+let gameInterval;
+let score = 0;
+let gameSpeed = 2;
+let highScore = localStorage.getItem('highScore') || 0;
+let obstacles = [];
+let powerUps = [];
+let powerUpActive = false;
+let immunityTime = 0;
+
+document.getElementById('high-score').innerText = highScore;
+
+class Character {
+    constructor(imageSrc) {
+        this.x = 50;
+        this.y = canvas.height / 2;
+        this.width = 40;
+        this.height = 40;
+        this.image = new Image();
+        this.image.src = imageSrc;
+    }
+
+    draw() {
+        ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
+    }
+
+    swim(direction) {
+        if (direction === 'up' && this.y > 0) this.y -= 20;
+        if (direction === 'down' && this.y < canvas.height - this.height) this.y += 20;
+    }
+}
+
+class SeaCreature {
+    constructor() {
+        this.x = canvas.width - 100;
+        this.y = Math.random() * (canvas.height - 40);
+        this.width = 60;
+        this.height = 60;
+        this.image = new Image();
+        this.image.src = 'https://via.placeholder.com/60';
+    }
+
+    draw() {
+        ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
+    }
+
+    move() {
+        this.x -= gameSpeed;
+        if (this.x < 0) {
+            this.x = canvas.width;
+            this.y = Math.random() * (canvas.height - this.height);
+        }
+    }
+}
+
+function startGame() {
+    const characterChoice = document.getElementById('character-select').value;
+    const imageSrc = characterChoice === 'swimmer1' 
+        ? 'https://via.placeholder.com/40' 
+        : 'https://via.placeholder.com/40?text=2';
+    
+    swimmer = new Character(imageSrc);
+    seaCreature = new SeaCreature();
+    score = 0;
+    gameSpeed = 2;
+    obstacles = [];
+    powerUps = [];
+    powerUpActive = false;
+
+    clearInterval(gameInterval);
+    gameInterval = setInterval(updateGame, 1000 / 60);
+
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowUp') swimmer.swim('up');
+        if (e.key === 'ArrowDown') swimmer.swim('down');
+    });
+}
+
+function updateGame() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    swimmer.draw();
+    seaCreature.draw();
+    seaCreature.move();
+    drawScore();
+    addObstacles();
+    addPowerUps();
+    checkCollision();
+
+    gameSpeed += 0.001;
+    score++;
+
+    if (score > highScore) {
+        highScore = score;
+        localStorage.setItem('highScore', highScore);
+        document.getElementById('high-score').innerText = highScore;
+    }
+}
+
+function addObstacles() {
+    if (Math.random() < 0.02) {
+        const obstacle = {
+            x: canvas.width,
+            y: Math.random() * (canvas.height - 30),
+            width: 30,
+            height: 30
+        };
+        obstacles.push(obstacle);
+    }
+
+    obstacles.forEach((obstacle, index) => {
+        ctx.fillStyle = 'red';
+        ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+        obstacle.x -= gameSpeed;
+
+        if (obstacle.x < 0) obstacles.splice(index, 1);
+
+        if (!powerUpActive && detectCollision(swimmer, obstacle)) {
+            gameOver();
+        }
+    });
+}
+
+function addPowerUps() {
+    if (Math.random() < 0.005) {
+        const powerUp = {
+            x: canvas.width,
+            y: Math.random() * (canvas.height - 30),
+            width: 20,
+            height: 20
+        };
+        powerUps.push(powerUp);
+    }
+
+    powerUps.forEach((powerUp, index) => {
+        ctx.fillStyle = 'gold';
+        ctx.fillRect(powerUp.x, powerUp.y, powerUp.width, powerUp.height);
+        powerUp.x -= gameSpeed;
+
+        if (detectCollision(swimmer, powerUp)) {
+            activatePowerUp();
+            powerUps.splice(index, 1);
+        }
+    });
+}
+
+function activatePowerUp() {
+    powerUpActive = true;
+    immunityTime = 300;
+    gameSpeed += 1;
+}
+
+function detectCollision(a, b) {
+    return a.x < b.x + b.width &&
+           a.x + a.width > b.x &&
+           a.y < b.y + b.height &&
+           a.y + a.height > b.y;
+}
+
+function drawScore() {
+    ctx.fillStyle = 'white';
+    ctx.font = '20px Arial';
+    ctx.fillText(`Score: ${score}`, 10, 20);
+}
+
+function gameOver() {
+    clearInterval(gameInterval);
+    alert(`Game Over! Your Score: ${score}`);
